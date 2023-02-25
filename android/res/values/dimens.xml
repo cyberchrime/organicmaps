@@ -110,7 +110,7 @@
   <dimen name="nav_progress">4sp</dimen>
   <dimen name="nav_progress_head">2dp</dimen>
   <dimen name="nav_button_height">@dimen/primary_button_min_height</dimen>
-  <dimen name="nav_icon_size">48dp</dimen>
+  <dimen name="nav_icon_size">36dp</dimen>
   <dimen name="nav_bottom_gap">12dp</dimen>
   <dimen name="nav_menu_height">70sp</dimen>
   <dimen name="nav_menu_content_height">64dp</dimen>

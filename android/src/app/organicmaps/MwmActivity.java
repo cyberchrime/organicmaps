@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.location.Location;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.KeyEvent;
@@ -23,10 +24,12 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.CallSuper;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresPermission;
 import androidx.annotation.StyleRes;
 import androidx.annotation.UiThread;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
@@ -71,6 +74,7 @@ import app.organicmaps.maplayer.isolines.IsolinesManager;
 import app.organicmaps.maplayer.isolines.IsolinesState;
 import app.organicmaps.maplayer.subway.SubwayManager;
 import app.organicmaps.routing.NavigationController;
+import app.organicmaps.routing.NavigationService;
 import app.organicmaps.routing.RoutePointInfo;
 import app.organicmaps.routing.RoutingBottomMenuListener;
 import app.organicmaps.routing.RoutingController;
@@ -110,6 +114,8 @@ import java.util.Stack;
 
 import static android.Manifest.permission.ACCESS_COARSE_LOCATION;
 import static android.Manifest.permission.ACCESS_FINE_LOCATION;
+import static android.Manifest.permission.ACCESS_BACKGROUND_LOCATION;
+import static android.Manifest.permission.POST_NOTIFICATIONS;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static app.organicmaps.location.LocationState.LOCATION_TAG;
 
@@ -205,6 +211,14 @@ public class MwmActivity extends BaseMwmFragmentActivity
   @SuppressWarnings("NotNullFieldNotInitialized")
   @NonNull
   private ActivityResultLauncher<String[]> mLocationPermissionRequest;
+
+  @SuppressWarnings("NotNullFieldNotInitialized")
+  @NonNull
+  private ActivityResultLauncher<String> mBackgroundLocationPermissionRequest;
+
+  @SuppressWarnings("NotNullFieldNotInitialized")
+  @NonNull
+  private ActivityResultLauncher<String> mPostNotificationPermissionRequest;
 
   @SuppressWarnings("NotNullFieldNotInitialized")
   @NonNull
@@ -411,6 +425,10 @@ public class MwmActivity extends BaseMwmFragmentActivity
         this::onLocationPermissionsResult);
     mLocationResolutionRequest = registerForActivityResult(new ActivityResultContracts.StartIntentSenderForResult(),
         this::onLocationResolutionResult);
+    mBackgroundLocationPermissionRequest = registerForActivityResult(new ActivityResultContracts.RequestPermission(),
+        this::onBackgroundLocationPermissionsResult);
+    mPostNotificationPermissionRequest = registerForActivityResult(new ActivityResultContracts.RequestPermission(),
+        this::onPostNotificationPermissionResult);
 
     boolean isConsumed = savedInstanceState == null && processIntent(getIntent());
     boolean isFirstLaunch = Counters.isFirstLaunch(this);
@@ -847,8 +865,6 @@ public class MwmActivity extends BaseMwmFragmentActivity
         fragment.saveRoutingPanelState(outState);
     }
 
-    mNavigationController.onActivitySaveInstanceState(this, outState);
-
     RoutingController.get().onSaveState();
 
     if (!isChangingConfigurations())
@@ -881,8 +897,6 @@ public class MwmActivity extends BaseMwmFragmentActivity
 
     if (!mIsTabletLayout && RoutingController.get().isPlanning())
       mRoutingPlanInplaceController.restoreState(savedInstanceState);
-
-    mNavigationController.onRestoreState(savedInstanceState, this);
   }
 
   @Override
@@ -1002,7 +1016,7 @@ public class MwmActivity extends BaseMwmFragmentActivity
     if (mOnmapDownloader != null)
       mOnmapDownloader.onResume();
 
-    mNavigationController.onActivityResumed(this);
+    mNavigationController.refresh();
     refreshLightStatusBar();
   }
 
@@ -1036,11 +1050,8 @@ public class MwmActivity extends BaseMwmFragmentActivity
   @Override
   protected void onPause()
   {
-    if (!RoutingController.get().isNavigating())
-      TtsPlayer.INSTANCE.stop();
     if (mOnmapDownloader != null)
       mOnmapDownloader.onPause();
-    mNavigationController.onActivityPaused(this);
     pauseLocationInBackground();
     dismissLocationErrorDialog();
     dismissAlertDialog();
@@ -1087,6 +1098,10 @@ public class MwmActivity extends BaseMwmFragmentActivity
     mLocationPermissionRequest = null;
     mLocationResolutionRequest.unregister();
     mLocationResolutionRequest = null;
+    mBackgroundLocationPermissionRequest.unregister();
+    mBackgroundLocationPermissionRequest = null;
+    mPostNotificationPermissionRequest.unregister();
+    mPostNotificationPermissionRequest = null;
   }
 
   @Override
@@ -1519,7 +1534,7 @@ public class MwmActivity extends BaseMwmFragmentActivity
       return;
 
     mRoutingPlanInplaceController.hideDrivingOptionsView();
-    mNavigationController.stop(this);
+    NavigationService.stop(this);
     mMapButtonsViewModel.setSearchOption(null);
     mMapButtonsViewModel.setLayoutMode(MapButtonsController.LayoutMode.regular);
     refreshLightStatusBar();
@@ -1530,7 +1545,7 @@ public class MwmActivity extends BaseMwmFragmentActivity
   {
     closeFloatingToolbarsAndPanels(true);
     ThemeSwitcher.INSTANCE.restart(isMapRendererActive());
-    mNavigationController.start(this);
+    NavigationService.start(this);
     mMapButtonsViewModel.setLayoutMode(MapButtonsController.LayoutMode.navigation);
     refreshLightStatusBar();
   }
@@ -1556,7 +1571,7 @@ public class MwmActivity extends BaseMwmFragmentActivity
   {
     closeFloatingToolbarsAndPanels(true);
     ThemeSwitcher.INSTANCE.restart(isMapRendererActive());
-    mNavigationController.stop(this);
+    NavigationService.stop(this);
     mMapButtonsViewModel.setSearchOption(null);
     mMapButtonsViewModel.setLayoutMode(MapButtonsController.LayoutMode.planning);
     refreshLightStatusBar();
@@ -1766,6 +1781,63 @@ public class MwmActivity extends BaseMwmFragmentActivity
   }
 
   /**
+   * Request ACCESS_BACKGROUND_LOCATION permission.
+   */
+  @RequiresPermission(anyOf = {ACCESS_COARSE_LOCATION, ACCESS_FINE_LOCATION})
+  private void requestBackgroundLocationPermission()
+  {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+        ActivityCompat.checkSelfPermission(this, ACCESS_BACKGROUND_LOCATION) == PERMISSION_GRANTED)
+    {
+      Logger.i(LOCATION_TAG, "Permissions ACCESS_BACKGROUND_LOCATION is granted");
+      return;
+    }
+
+    if (ActivityCompat.shouldShowRequestPermissionRationale(this, ACCESS_BACKGROUND_LOCATION))
+    {
+      Logger.i(TAG, "Displaying the background location disclaimer");
+
+      dismissAlertDialog();
+      mAlertDialog = new MaterialAlertDialogBuilder(this, R.style.MwmTheme_AlertDialog)
+          // TODO: add disclaimer text
+          .setTitle("Background location")
+          .setMessage("bla bla")
+          .setCancelable(false)
+          .setNegativeButton(R.string.decline, (dlg, which) -> {
+            Logger.w(LOCATION_TAG, "The background location disclaimer has been refused");
+            // Continue without the background location.
+          })
+          .setPositiveButton(R.string.accept, (dlg, which) -> {
+            Logger.i(LOCATION_TAG, "The background location disclaimer has been accepted");
+            Logger.i(LOCATION_TAG, "Requesting ACCESS_BACKGROUND_LOCATION permission");
+            mBackgroundLocationPermissionRequest.launch(ACCESS_BACKGROUND_LOCATION);
+          })
+          .setOnDismissListener(dialog -> mAlertDialog = null)
+          .show();
+      return;
+    }
+
+    Logger.i(LOCATION_TAG, "Requesting ACCESS_BACKGROUND_LOCATION permission");
+    mBackgroundLocationPermissionRequest.launch(ACCESS_BACKGROUND_LOCATION);
+  }
+
+  /**
+   * Request POST_NOTIFICATIONS permission.
+   */
+  private void requestPostNotificationsPermission()
+  {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ActivityCompat.checkSelfPermission(this, POST_NOTIFICATIONS) == PERMISSION_GRANTED)
+    {
+      Logger.i(TAG, "Permissions POST_NOTIFICATIONS is granted");
+      return;
+    }
+
+    Logger.i(TAG, "Requesting POST_NOTIFICATIONS permission");
+    mPostNotificationPermissionRequest.launch(POST_NOTIFICATIONS);
+  }
+
+  /**
    * Resume location services when entering the foreground.
    */
   private void resumeLocationInForeground()
@@ -1814,12 +1886,18 @@ public class MwmActivity extends BaseMwmFragmentActivity
     if (!LocationHelper.INSTANCE.isActive())
       return;
 
+    if (ContextCompat.checkSelfPermission(this, ACCESS_BACKGROUND_LOCATION) == PERMISSION_GRANTED)
+    {
+      Logger.i(LOCATION_TAG, "Permission ACCESS_BACKGROUND_LOCATION is granted, keeping location in the background");
+      return;
+    }
+
     Logger.i(LOCATION_TAG);
     LocationHelper.INSTANCE.stop();
   }
 
   /**
-   * Called on the result of the system location dialog.
+   * Called on the result of the ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION request.
    * @param permissions permissions granted or refused.
    */
   @UiThread
@@ -1859,6 +1937,32 @@ public class MwmActivity extends BaseMwmFragmentActivity
         .setOnDismissListener(dialog -> mLocationErrorDialog = null)
         .setNegativeButton(R.string.close, null)
         .show();
+  }
+
+  /**
+   * Called on the result of the ACCESS_BACKGROUND_LOCATION request.
+   * @param granted true if permission has been granted.
+   */
+  @UiThread
+  private void onBackgroundLocationPermissionsResult(boolean granted)
+  {
+    if (granted)
+      Logger.i(LOCATION_TAG, "Permission ACCESS_BACKGROUND_LOCATION has been granted");
+    else
+      Logger.w(LOCATION_TAG, "Permission ACCESS_BACKGROUND_LOCATION has been refused");
+  }
+
+  /**
+   * Called on the result of the POST_NOTIFICATIONS request.
+   * @param granted true if permission has been granted.
+   */
+  @UiThread
+  private void onPostNotificationPermissionResult(boolean granted)
+  {
+    if (granted)
+      Logger.i(TAG, "Permission POST_NOTIFICATIONS has been granted");
+    else
+      Logger.w(TAG, "Permission POST_NOTIFICATIONS has been refused");
   }
 
   /**
@@ -1995,6 +2099,21 @@ public class MwmActivity extends BaseMwmFragmentActivity
   @Override
   public void onRoutingStart()
   {
+    // Don't start navigation until location permissions are granted.
+    if (ActivityCompat.checkSelfPermission(this, ACCESS_FINE_LOCATION) != PERMISSION_GRANTED &&
+        ActivityCompat.checkSelfPermission(this, ACCESS_COARSE_LOCATION) != PERMISSION_GRANTED)
+    {
+      Logger.w(LOCATION_TAG, "Permissions ACCESS_COARSE_LOCATION and ACCESS_FINE_LOCATION are not granted");
+      startLocation();
+      return;
+    }
+
+    // Request ACCESS_BACKGROUND_LOCATION for the NavigationService.
+    requestBackgroundLocationPermission();
+
+    // Request POST_NOTIFICATIONS for the NavigationService.
+    requestPostNotificationsPermission();
+
     closeFloatingPanels();
     RoutingController.get().start();
   }

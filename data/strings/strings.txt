@@ -16945,7 +16945,7 @@
     zh-Hant = OpenStreetMap 編輯人員將檢查更改並在有任何問題時與您聯繫。
 
   [navigation_stop_button]
-    tags = ios
+    tags = android,ios
     en = stop
     af = stop
     ar = توقف
