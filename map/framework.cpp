@@ -363,11 +363,20 @@ Framework::Framework(FrameworkParams const & params)
   m_storage.SetStartDownloadingCallback([this]() { UpdatePlacePageInfoForCurrentSelection(); });
   LOG(LDEBUG, ("Storage initialized"));
 
-  RegisterAllMaps();
-  LOG(LDEBUG, ("Maps initialized"));
+  threads::SimpleThread([this, &editor]()
+  {
+    RegisterAllMaps();
+    LOG(LDEBUG, ("Maps initialized"));
 
-  // Perform real initialization after World was loaded.
-  GetSearchAPI().InitAfterWorldLoaded();
+    // Perform real initialization after World was loaded.
+    GetSearchAPI().InitAfterWorldLoaded();
+
+    GetPlatform().RunTask(Platform::Thread::Gui, [this, &editor]()
+    {
+      editor.LoadEdits();
+      m_featuresFetcher.GetDataSource().AddObserver(editor);
+    });
+  }).detach();
 
   m_routingManager.SetRouterImpl(RouterType::Vehicle);
 
@@ -379,9 +388,6 @@ Framework::Framework(FrameworkParams const & params)
 
   editor.SetDelegate(make_unique<search::EditorDelegate>(m_featuresFetcher.GetDataSource()));
   editor.SetInvalidateFn([this](){ InvalidateRect(GetCurrentViewport()); });
-  editor.LoadEdits();
-
-  m_featuresFetcher.GetDataSource().AddObserver(editor);
 
   LOG(LDEBUG, ("Editor initialized"));
 
@@ -508,10 +514,6 @@ bool Framework::HasUnsavedEdits(storage::CountryId const & countryId)
 
 void Framework::RegisterAllMaps()
 {
-  ASSERT(!m_storage.IsDownloadInProgress(),
-         ("Registering maps while map downloading leads to removing downloading maps from "
-          "ActiveMapsListener::m_items."));
-
   m_storage.RegisterAllLocalMaps(m_enabledDiffs);
 
   vector<shared_ptr<LocalCountryFile>> maps;

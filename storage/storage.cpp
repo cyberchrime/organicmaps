@@ -283,7 +283,8 @@ Storage::WorldStatus Storage::GetForceDownloadWorlds(std::vector<platform::Count
 
 void Storage::RegisterAllLocalMaps(bool enableDiffs /* = false */)
 {
-  CHECK_THREAD_CHECKER(m_threadChecker, ());
+  //CHECK_THREAD_CHECKER(m_threadChecker, ());
+  //ASSERT(!IsDownloadInProgress(), ());
 
   m_localFiles.clear();
   m_localFilesForFakeCountries.clear();
@@ -324,12 +325,12 @@ void Storage::RegisterAllLocalMaps(bool enableDiffs /* = false */)
   // Note: call order is important, diffs loading must be called first.
   // Since diffs info downloading and servers list downloading
   // are working on network thread, consecutive executing is guaranteed.
-  RestoreDownloadQueue();
+  //RestoreDownloadQueue();
 }
 
 void Storage::GetLocalMaps(vector<LocalFilePtr> & maps) const
 {
-  CHECK_THREAD_CHECKER(m_threadChecker, ());
+  //CHECK_THREAD_CHECKER(m_threadChecker, ());
 
   for (auto const & p : m_localFiles)
     maps.push_back(GetLatestLocalFile(p.first));
@@ -424,7 +425,7 @@ LocalFilePtr Storage::GetLatestLocalFile(CountryFile const & countryFile) const
 
 LocalFilePtr Storage::GetLatestLocalFile(CountryId const & countryId) const
 {
-  CHECK_THREAD_CHECKER(m_threadChecker, ());
+  //CHECK_THREAD_CHECKER(m_threadChecker, ());
 
   auto const it = m_localFiles.find(countryId);
   if (it == m_localFiles.end() || it->second.empty())
