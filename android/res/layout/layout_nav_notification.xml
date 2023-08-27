@@ -11,7 +11,9 @@
       android:layout_height="@dimen/nav_icon_size"
       android:layout_alignParentStart="true"
       android:layout_alignParentTop="true"
-      app:tint="@color/white_primary" />
+      android:tint="@color/navigation_notification_tint"
+      app:tint="@color/navigation_notification_tint"
+      tools:ignore="UseAppTint" />
 
   <TextView
       android:id="@+id/turn_distance"
@@ -23,7 +25,7 @@
       android:textSize="@dimen/text_size_body_2"
       android:textStyle="bold"
       android:fontFamily="sans-serif-light"
-      android:textColor="@color/white_primary"
+      android:textColor="@color/text_navigation_notification_title"
       tools:text="320 m" />
 
   <TextView
@@ -33,6 +35,6 @@
       android:layout_below="@+id/turn_distance"
       android:layout_toEndOf="@+id/turn"
       android:textSize="@dimen/text_size_body_4"
-      android:textColor="@color/white_primary"
+      android:textColor="@color/text_navigation_notification_subtitle"
       tools:text="Turn right" />
 </RelativeLayout>

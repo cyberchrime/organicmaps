@@ -99,13 +99,18 @@ public class NavigationService extends Service implements LocationListener
         .setOngoing(true)
         .setShowWhen(false)
         .setOnlyAlertOnce(true)
-        .setColorized(true)
-        .setColor(ContextCompat.getColor(this, R.color.bg_navigation_notification))
         .setSmallIcon(R.drawable.ic_notification)
         .setStyle(new NotificationCompat.DecoratedCustomViewStyle())
         .setCustomContentView(mRemoteViews)
         .setCustomBigContentView(mRemoteViews)
         .setContentIntent(contentPendingIntent);
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+    {
+      mNotificationBuilder = mNotificationBuilder
+          .setColorized(true)
+          .setColor(ContextCompat.getColor(this, R.color.bg_navigation_notification));
+    }
 
     /*
      * Subscribe to location updates.

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Routing-->
+  <color name="bg_navigation_notification">#FF1769FA</color>
+  <color name="navigation_notification_tint">@color/white_primary</color>
+  <color name="text_navigation_notification_title">@color/white_primary</color>
+  <color name="text_navigation_notification_subtitle">@color/white_primary</color>
+</resources>

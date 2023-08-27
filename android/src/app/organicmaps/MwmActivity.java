@@ -1886,7 +1886,8 @@ public class MwmActivity extends BaseMwmFragmentActivity
     if (!LocationHelper.INSTANCE.isActive())
       return;
 
-    if (ContextCompat.checkSelfPermission(this, ACCESS_BACKGROUND_LOCATION) == PERMISSION_GRANTED)
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+        ContextCompat.checkSelfPermission(this, ACCESS_BACKGROUND_LOCATION) == PERMISSION_GRANTED)
     {
       Logger.i(LOCATION_TAG, "Permission ACCESS_BACKGROUND_LOCATION is granted, keeping location in the background");
       return;
